@@ -57,17 +57,24 @@ export function SignupForm() {
         body: JSON.stringify(values),
       });
 
-      const payload = await response.json();
+      let payload: { error?: unknown; message?: string } | null = null;
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("application/json")) {
+        payload = await response
+          .json()
+          .catch(() => null);
+      }
+
       if (!response.ok) {
-        throw new Error(
-          typeof payload.error === "string"
+        const message =
+          payload && typeof payload.error === "string"
             ? payload.error
-            : "登録に失敗しました。",
-        );
+            : "登録に失敗しました。時間をおいて再度お試しください。";
+        throw new Error(message);
       }
 
       setServerSuccess(
-        payload.message ?? "仮登録が完了しました。メールをご確認ください。",
+        payload?.message ?? "仮登録が完了しました。メールをご確認ください。",
       );
       reset({ email: values.email, username: values.username, password: "" });
       setTimeout(() => router.push("/login"), 800);
