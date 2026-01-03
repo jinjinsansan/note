@@ -1,8 +1,22 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## ⚠️ 重要：セットアップが必要です
+
+サインアップ機能を使用する前に、**必ず** `SETUP_INSTRUCTIONS.md` を読んで、Supabase Service Role Keyを設定してください。
+
+詳細は [SETUP_INSTRUCTIONS.md](./SETUP_INSTRUCTIONS.md) を参照してください。
+
 ## Getting Started
 
-First, run the development server:
+First, copy the environment variables template:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Then edit `.env.local` and fill in your actual values (especially `SUPABASE_SERVICE_ROLE_KEY`).
+
+After that, run the development server:
 
 ```bash
 npm run dev
