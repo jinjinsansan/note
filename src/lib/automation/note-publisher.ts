@@ -6,7 +6,7 @@ import { decryptToken } from "@/lib/security";
 
 type AutomationJobInsert = Database["public"]["Tables"]["automation_jobs"]["Insert"];
 type AutomationJobRow = Database["public"]["Tables"]["automation_jobs"]["Row"];
-type PageWithXpath = Page & { $x: (expression: string) => Promise<ElementHandle<Node>[]> };
+type PageWithXpath = Page & { $x: (expression: string) => Promise<ElementHandle<Element>[]> };
 
 type AutomationJobInput = {
   articleId: string;

@@ -10,7 +10,7 @@ type ResponseContentBlock = {
   text?: ResponseTextBlock | null;
 };
 
-type OpenAIResponse = {
+type OpenAIResponseLike = {
   output?: Array<{
     content?: ResponseContentBlock[] | null;
   }>;
@@ -24,8 +24,9 @@ const normalizeResponseText = (text?: ResponseTextBlock | null): string => {
   return text.value ?? "";
 };
 
-export const extractResponseText = (response: OpenAIResponse): string => {
-  for (const item of response.output ?? []) {
+export const extractResponseText = (response: unknown): string => {
+  const output = (response as OpenAIResponseLike | undefined)?.output ?? [];
+  for (const item of output) {
     const contents = item.content ?? [];
     for (const content of contents) {
       const value = normalizeResponseText(content?.text);

@@ -1,4 +1,4 @@
-import type { ResponseCreateParamsNonStreaming } from "openai/resources/responses";
+import type { ResponseCreateParamsNonStreaming } from "openai/resources/responses/responses";
 import { getOpenAIClient, getResponsesModel } from "./openai";
 import { extractResponseText, safeJSONParse } from "./utils";
 

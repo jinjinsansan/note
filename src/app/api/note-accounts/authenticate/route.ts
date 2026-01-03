@@ -48,7 +48,7 @@ const focusAndType = async (page: Page, selectors: string[], value: string) => {
 };
 
 type PageWithXpath = Page & {
-  $x: (expression: string) => Promise<ElementHandle<Node>[]>;
+  $x: (expression: string) => Promise<ElementHandle<Element>[]>;
 };
 
 const clickFirst = async (page: Page, selectors: string[]) => {

@@ -1,4 +1,4 @@
-import type { ResponseCreateParamsNonStreaming } from "openai/resources/responses";
+import type { ResponseCreateParamsNonStreaming } from "openai/resources/responses/responses";
 import type { Database } from "@/types/supabase";
 
 import { getOpenAIClient, getResponsesModel } from "./openai";
