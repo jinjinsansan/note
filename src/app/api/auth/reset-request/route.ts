@@ -7,7 +7,7 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
 

@@ -5,7 +5,7 @@ import { NoteAccountManager } from "@/components/note-accounts/note-account-mana
 import type { NoteAccountSummary } from "@/types/note-account";
 
 export default async function NoteAccountsPage() {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();

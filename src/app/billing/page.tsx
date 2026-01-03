@@ -20,7 +20,7 @@ const PRO_FEATURES = [
 ];
 
 export default async function BillingPage() {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();

@@ -8,7 +8,7 @@ type RouteContext = {
 
 export async function DELETE(_request: Request, context: RouteContext) {
   const { id, imageId } = await context.params;
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },

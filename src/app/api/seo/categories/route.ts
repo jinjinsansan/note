@@ -5,7 +5,7 @@ import { logApiUsage } from "@/lib/api-logger";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function GET() {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },

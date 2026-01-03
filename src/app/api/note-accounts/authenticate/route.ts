@@ -96,7 +96,7 @@ const fetchProfile = async (page: Page) => {
 };
 
 export async function POST(request: Request) {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },

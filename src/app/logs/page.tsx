@@ -5,7 +5,7 @@ import { ApiUsageLogTable } from "@/components/logs/api-usage-log-table";
 import type { ApiUsageLogSummary } from "@/types/api-log";
 
 export default async function LogsPage() {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();

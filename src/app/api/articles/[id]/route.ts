@@ -20,7 +20,7 @@ type RouteContext = {
 
 export async function GET(_request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -69,7 +69,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 export async function PUT(request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },

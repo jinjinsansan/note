@@ -17,7 +17,7 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -61,7 +61,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },

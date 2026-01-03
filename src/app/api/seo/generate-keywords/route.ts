@@ -16,7 +16,7 @@ const schema = z.object({
 const allowedCategories = new Set(SEO_CATEGORIES);
 
 export async function POST(request: Request) {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },

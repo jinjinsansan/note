@@ -6,7 +6,7 @@ import type { ArticleSummary } from "@/types/article";
 import type { CtaSummary } from "@/types/cta";
 
 export default async function BulkPublishPage() {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();

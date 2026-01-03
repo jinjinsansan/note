@@ -9,7 +9,7 @@ type RouteContext = {
 
 export async function POST(_request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },

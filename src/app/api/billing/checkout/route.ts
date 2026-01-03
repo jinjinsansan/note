@@ -11,7 +11,7 @@ type BillingUserProfile = Pick<Database["public"]["Tables"]["users"]["Row"], "em
 const defaultOrigin = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 export async function POST() {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },

@@ -5,7 +5,7 @@ import { CtaManager } from "@/components/ctas/cta-manager";
 import type { CtaSummary } from "@/types/cta";
 
 export default async function CtasPage() {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();

@@ -15,7 +15,7 @@ export default async function ArticlesPage({
 }: {
   searchParams?: Record<string, string | undefined>;
 }) {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();

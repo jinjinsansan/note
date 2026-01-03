@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   const { email, password, username } = parsed.data;
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
 
   console.log("[signup] Supabase認証サインアップ開始");
   const { data, error } = await supabase.auth.signUp({

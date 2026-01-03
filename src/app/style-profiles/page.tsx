@@ -5,7 +5,7 @@ import { StyleProfileManager } from "@/components/style-profiles/style-profile-m
 import type { StyleProfileSummary } from "@/types/style-profile";
 
 export default async function StyleProfilesPage() {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
