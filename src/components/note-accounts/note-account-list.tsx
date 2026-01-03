@@ -73,7 +73,7 @@ export function NoteAccountList({ accounts, onRemoved, onPrimaryChanged }: Props
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
-              variant="secondary"
+              variant="outline"
               size="sm"
               onClick={() => handleSetPrimary(account)}
               disabled={account.is_primary || primaryId === account.id}

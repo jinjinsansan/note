@@ -1,13 +1,11 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
 import { SEO_CATEGORIES } from "@/lib/seo-data";
-import type { Database } from "@/types/supabase";
 import { logApiUsage } from "@/lib/api-logger";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function GET() {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },

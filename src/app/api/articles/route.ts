@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
-import type { Database } from "@/types/supabase";
 import { logApiUsage } from "@/lib/api-logger";
+import type { Database } from "@/types/supabase";
 import {
   getMonthlyArticleUsage,
   getPlanDefinition,
@@ -17,6 +15,11 @@ import {
 } from "@/lib/ai/article-generator";
 import { generateImagesForArticle } from "@/lib/ai/image-generator";
 import { ensureOpenAIConfigured } from "@/lib/ai/openai";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+
+type UserProfileRow = Pick<Database["public"]["Tables"]["users"]["Row"], "subscription_plan">;
+type NoteAccountRow = Pick<Database["public"]["Tables"]["note_accounts"]["Row"], "id">;
+type ArticleInsert = Database["public"]["Tables"]["articles"]["Insert"];
 
 const ArticleLength = {
   short: 2000,
@@ -37,7 +40,7 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -46,6 +49,8 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const userId = session.user.id;
 
   const { data, error } = await supabase
     .from("articles")
@@ -81,7 +86,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -102,11 +107,13 @@ export async function POST(request: Request) {
     .eq("id", userId)
     .single();
 
-  if (userProfileError || !userProfile) {
+  const profileData = userProfile as UserProfileRow | null;
+
+  if (userProfileError || !profileData) {
     return NextResponse.json({ error: "ユーザー情報が見つかりません" }, { status: 400 });
   }
 
-  const plan = getPlanDefinition(userProfile.subscription_plan);
+  const plan = getPlanDefinition(profileData.subscription_plan);
   const usageThisMonth = await getMonthlyArticleUsage(supabase, userId);
 
   if (plan.monthlyArticleQuota !== null && usageThisMonth >= plan.monthlyArticleQuota) {
@@ -140,25 +147,20 @@ export async function POST(request: Request) {
   const { title, category, tone, brief, length, styleProfileId, ctaId, keywords, generateImages } = parsed.data;
   const targetWords = ArticleLength[length];
 
-  type StyleProfileRow = Pick<
-    Database["public"]["Tables"]["style_profiles"]["Row"],
-    "id" | "profile_name" | "tone" | "text_style" | "vocabulary_level" | "analysis_data"
-  >;
+  type StyleProfileRow = Database["public"]["Tables"]["style_profiles"]["Row"];
 
-  type CtaRow = Pick<
-    Database["public"]["Tables"]["cta_settings"]["Row"],
-    "id" | "cta_name" | "cta_content" | "cta_link"
-  >;
+  type CtaRow = Database["public"]["Tables"]["cta_settings"]["Row"];
 
   let styleProfile: StyleProfileRow | null = null;
   if (styleProfileId) {
     const { data, error } = await supabase
       .from("style_profiles")
-      .select("id,profile_name,tone,text_style,vocabulary_level,analysis_data")
+      .select("*")
       .eq("user_id", session.user.id)
       .eq("id", styleProfileId)
       .single();
-    if (error || !data) {
+    const styleProfileData = data as StyleProfileRow | null;
+    if (error || !styleProfileData) {
       await logApiUsage({
         supabase,
         userId,
@@ -170,18 +172,19 @@ export async function POST(request: Request) {
       });
       return NextResponse.json({ error: "スタイルプロファイルが見つかりません" }, { status: 400 });
     }
-    styleProfile = data;
+    styleProfile = styleProfileData;
   }
 
   let cta: CtaRow | null = null;
   if (ctaId) {
     const { data, error } = await supabase
       .from("cta_settings")
-      .select("id,cta_name,cta_content,cta_link")
+      .select("*")
       .eq("user_id", session.user.id)
       .eq("id", ctaId)
       .single();
-    if (error || !data) {
+    const ctaData = data as CtaRow | null;
+    if (error || !ctaData) {
       await logApiUsage({
         supabase,
         userId,
@@ -193,7 +196,7 @@ export async function POST(request: Request) {
       });
       return NextResponse.json({ error: "CTAが見つかりません" }, { status: 400 });
     }
-    cta = data;
+    cta = ctaData;
   }
 
   const { data: primaryAccount } = await supabase
@@ -205,7 +208,8 @@ export async function POST(request: Request) {
     .limit(1)
     .maybeSingle();
 
-  const defaultNoteAccountId = primaryAccount?.id ?? null;
+  const noteAccountData = primaryAccount as NoteAccountRow | null;
+  const defaultNoteAccountId = noteAccountData?.id ?? null;
 
   const keywordList = keywords?.map((keyword) => keyword.trim()).filter(Boolean) ?? [];
 
@@ -243,25 +247,29 @@ export async function POST(request: Request) {
   );
   const metaDescription = draft.metaDescription.slice(0, 150);
 
+  const articlePayload: ArticleInsert = {
+    user_id: session.user.id,
+    title,
+    category,
+    content,
+    word_count: wordCount,
+    status: "draft",
+    meta_description: metaDescription,
+    seo_keywords: keywordList.length ? (keywordList as ArticleInsert["seo_keywords"]) : null,
+    note_account_id: defaultNoteAccountId,
+    style_profile_id: styleProfile?.id ?? null,
+    cta_id: cta?.id ?? null,
+  };
+
   const { data, error } = await supabase
     .from("articles")
-    .insert({
-      user_id: session.user.id,
-      title,
-      category,
-      content,
-      word_count: wordCount,
-      status: "draft",
-      meta_description: metaDescription,
-      seo_keywords: keywordList.length ? keywordList : null,
-      note_account_id: defaultNoteAccountId,
-      style_profile_id: styleProfile?.id ?? null,
-      cta_id: cta?.id ?? null,
-    })
+    .insert(articlePayload as never)
     .select(
       "id,title,category,status,word_count,meta_description,created_at,updated_at",
     )
     .single();
+
+  const articleRecord = data as Database["public"]["Tables"]["articles"]["Row"] | null;
 
   if (error) {
     await logApiUsage({
@@ -277,17 +285,21 @@ export async function POST(request: Request) {
   }
 
   if (plan.monthlyArticleQuota !== null) {
+    const userUpdate: Database["public"]["Tables"]["users"]["Update"] = {
+      api_quota_used: usageThisMonth + 1,
+      api_quota_monthly: plan.monthlyArticleQuota,
+    };
     await supabase
       .from("users")
-      .update({
-        api_quota_used: usageThisMonth + 1,
-        api_quota_monthly: plan.monthlyArticleQuota,
-      })
+      .update(userUpdate as never)
       .eq("id", userId);
   }
 
   if (generateImages && plan.id !== "free") {
     try {
+      if (!articleRecord?.id) {
+        throw new Error("article insertion did not return an id");
+      }
       const prompts = [
         { headingId: "hero", prompt: draft.heroImagePrompt },
         ...draft.sections.slice(0, 3).map((section, index) => ({
@@ -297,16 +309,16 @@ export async function POST(request: Request) {
       ];
       const generatedImages = await generateImagesForArticle(prompts);
       if (generatedImages.length) {
-        await supabase.from("article_images").insert(
+        const imagePayloads: Database["public"]["Tables"]["article_images"]["Insert"][] =
           generatedImages.map((image) => ({
-            article_id: data.id,
+            article_id: articleRecord.id,
             heading_id: image.headingId ?? null,
             image_url: image.imageUrl,
             alt_text: image.altText,
             image_prompt: image.prompt,
             generated_by: "openai",
-          })),
-        );
+          }));
+        await supabase.from("article_images").insert(imagePayloads as never);
       }
     } catch (imageError) {
       console.error("image_generation_failed", imageError);

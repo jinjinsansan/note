@@ -1,11 +1,11 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-
-import type { Database } from "@/types/supabase";
 import type { CtaSummary } from "@/types/cta";
 import { logApiUsage } from "@/lib/api-logger";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/supabase";
+
+type CtaInsert = Database["public"]["Tables"]["cta_settings"]["Insert"];
 
 const schema = z.object({
   name: z.string().min(2, "CTA名を入力してください"),
@@ -14,7 +14,7 @@ const schema = z.object({
 });
 
 export async function GET() {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -58,7 +58,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -89,14 +89,15 @@ export async function POST(request: Request) {
   }
 
   const { name, content, link } = parsed.data;
+  const payload: CtaInsert = {
+    user_id: session.user.id,
+    cta_name: name,
+    cta_content: content,
+    cta_link: link,
+  };
   const { data, error } = await supabase
     .from("cta_settings")
-    .insert({
-      user_id: session.user.id,
-      cta_name: name,
-      cta_content: content,
-      cta_link: link,
-    })
+    .insert(payload as never)
     .select("id,cta_name,cta_content,cta_link,created_at")
     .single();
 

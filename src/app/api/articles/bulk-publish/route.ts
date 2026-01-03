@@ -1,11 +1,12 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-
-import type { Database } from "@/types/supabase";
 import { logApiUsage } from "@/lib/api-logger";
 import { queueNoteAutomationJobs } from "@/lib/automation/note-publisher";
+import type { Database } from "@/types/supabase";
+
+type ArticleRecord = Pick<Database["public"]["Tables"]["articles"]["Row"], "id" | "note_account_id">;
+type NoteAccountRecord = Pick<Database["public"]["Tables"]["note_accounts"]["Row"], "id">;
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const ArticlePayload = z.object({
   id: z.string().uuid(),
@@ -18,7 +19,7 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -72,7 +73,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "対象記事が見つかりません" }, { status: 404 });
   }
 
-  const articleMap = new Map(articleRecords.map((record) => [record.id, record]));
+  const typedArticles = (articleRecords ?? []) as ArticleRecord[];
+  const articleMap = new Map(typedArticles.map((record) => [record.id, record]));
 
   for (const payload of parsed.data.articles) {
     const article = articleMap.get(payload.id);
@@ -86,7 +88,7 @@ export async function POST(request: Request) {
 
   const noteAccountIds = Array.from(
     new Set(
-      articleRecords
+      typedArticles
         .map((record) => record.note_account_id)
         .filter((value): value is string => Boolean(value)),
     ),
@@ -111,11 +113,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "noteアカウントの取得に失敗しました" }, { status: 500 });
   }
 
+  const typedNoteAccounts = (noteAccounts ?? []) as NoteAccountRecord[];
   if (!noteAccounts || noteAccounts.length !== noteAccountIds.length) {
     return NextResponse.json({ error: "noteアカウント情報が不足しています" }, { status: 400 });
   }
 
-  const noteAccountMap = new Map(noteAccounts.map((account) => [account.id, account]));
+  const noteAccountMap = new Map(typedNoteAccounts.map((account) => [account.id, account]));
 
   let automationResult;
   try {

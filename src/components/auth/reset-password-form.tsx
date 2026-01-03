@@ -51,7 +51,7 @@ export function ResetPasswordForm() {
       }
 
       if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
-        const { error } = await supabase.auth.getSessionFromUrl({ storeSession: true });
+        const { error } = await supabase.auth.exchangeCodeForSession(window.location.hash);
         if (!error && mounted) {
           setStatus("ready");
           router.replace("/reset-password");

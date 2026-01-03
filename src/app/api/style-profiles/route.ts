@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-
-import type { Database } from "@/types/supabase";
 import type { StyleProfileSummary } from "@/types/style-profile";
 import { logApiUsage } from "@/lib/api-logger";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/supabase";
+
+type StyleProfileInsert = Database["public"]["Tables"]["style_profiles"]["Insert"];
 
 const insertSchema = z.object({
   profileName: z.string().min(2, "プロフィール名を入力してください"),
@@ -14,14 +14,14 @@ const insertSchema = z.object({
   vocabularyLevel: z.string().min(2, "語彙レベルを入力してください"),
   notes: z.string().optional(),
   sourceUrls: z.array(z.string().url("URL形式で入力してください")).min(1, "少なくとも1つのURLが必要です"),
-  analysis: z.record(z.any()).optional(),
+  analysis: z.record(z.string(), z.any()).optional(),
 });
 
 const selectFields =
   "id,profile_name,tone,text_style,vocabulary_level,learning_articles,created_at" as const;
 
 export async function GET() {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -65,7 +65,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -97,17 +97,19 @@ export async function POST(request: Request) {
 
   const { profileName, tone, textStyle, vocabularyLevel, notes, sourceUrls, analysis } = parsed.data;
 
+  const profilePayload: StyleProfileInsert = {
+    user_id: session.user.id,
+    profile_name: profileName,
+    tone,
+    text_style: textStyle,
+    vocabulary_level: vocabularyLevel,
+    learning_articles: { sourceUrls } as StyleProfileInsert["learning_articles"],
+    analysis_data: (analysis ?? (notes ? { notes } : null)) as StyleProfileInsert["analysis_data"],
+  };
+
   const { data, error } = await supabase
     .from("style_profiles")
-    .insert({
-      user_id: session.user.id,
-      profile_name: profileName,
-      tone,
-      text_style: textStyle,
-      vocabulary_level: vocabularyLevel,
-      learning_articles: { sourceUrls },
-      analysis_data: analysis ?? (notes ? { notes } : null),
-    })
+    .insert(profilePayload as never)
     .select(selectFields)
     .single();
 

@@ -192,7 +192,7 @@ export const analyzeArticleText = (text: string): ArticleMetrics => {
   const paragraphs = tokenizeParagraphs(text);
   const tokenizedWords = tokenizeWords(text);
   const words = tokenizedWords
-    .map((word) => sanitizeToken(word))
+    .map((word: string) => sanitizeToken(word))
     .filter(Boolean);
   const uniqueWords = new Set(words);
 

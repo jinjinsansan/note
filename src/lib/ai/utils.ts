@@ -1,16 +1,41 @@
-import type { Response } from "openai/resources/responses.mjs";
+type ResponseTextBlock =
+  | string
+  | {
+      value?: string | null;
+      annotations?: unknown[];
+    };
 
-export const extractResponseText = (response: Response): string => {
-  for (const item of response.output ?? []) {
-    const content = item.content?.[0];
-    if (content && content.type === "output_text" && content.text.trim()) {
-      return content.text.trim();
-    }
+type ResponseContentBlock = {
+  type?: string;
+  text?: ResponseTextBlock | null;
+};
+
+type OpenAIResponse = {
+  output?: Array<{
+    content?: ResponseContentBlock[] | null;
+  }>;
+};
+
+const normalizeResponseText = (text?: ResponseTextBlock | null): string => {
+  if (!text) return "";
+  if (typeof text === "string") {
+    return text;
   }
+  return text.value ?? "";
+};
 
-  const fallback = response.output?.[0]?.content?.[0];
-  if (fallback && "text" in fallback && fallback.text) {
-    return fallback.text;
+export const extractResponseText = (response: OpenAIResponse): string => {
+  for (const item of response.output ?? []) {
+    const contents = item.content ?? [];
+    for (const content of contents) {
+      const value = normalizeResponseText(content?.text);
+      if (content?.type === "output_text" && value.trim()) {
+        return value.trim();
+      }
+      if (value.trim()) {
+        return value.trim();
+      }
+    }
   }
 
   throw new Error("Failed to extract text from OpenAI response");

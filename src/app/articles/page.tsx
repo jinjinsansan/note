@@ -79,7 +79,8 @@ export default async function ArticlesPage({
 
   const styleProfiles = (styleProfilesData ?? []) as StyleProfileSummary[];
   const ctas = (ctasData ?? []) as CtaSummary[];
-  const plan = getPlanDefinition(userProfile?.subscription_plan);
+  const profile = userProfile as { subscription_plan: string | null } | null;
+  const plan = getPlanDefinition(profile?.subscription_plan);
   const usageCount = await getMonthlyArticleUsage(supabase, session.user.id);
   const planInfo = {
     planId: plan.id,

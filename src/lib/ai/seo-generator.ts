@@ -1,3 +1,4 @@
+import type { ResponseCreateParamsNonStreaming } from "openai/resources/responses";
 import { getOpenAIClient, getResponsesModel } from "./openai";
 import { extractResponseText, safeJSONParse } from "./utils";
 
@@ -92,19 +93,19 @@ export const generateKeywordIdeas = async (params: {
     .join("\n");
 
   const openai = getOpenAIClient();
-  const response = await openai.responses.create({
+  const responsePayload = {
     model: getResponsesModel(),
     input: [
-      {
-        role: "system",
-        content:
-          "You are an SEO strategist for Japanese creators. Return only JSON in the requested schema. Use realistic numeric ranges.",
-      },
+      { role: "system", content: "You are an SEO analyst..." },
       { role: "user", content: input },
     ],
     response_format: { type: "json_schema", json_schema: keywordSchema },
     temperature: 0.4,
-  });
+  } satisfies ResponseCreateParamsNonStreaming & {
+    response_format: { type: "json_schema"; json_schema: typeof keywordSchema };
+  };
+
+  const response = await openai.responses.create(responsePayload);
 
   const text = extractResponseText(response);
   const parsed = safeJSONParse<KeywordSchema>(text);
@@ -126,7 +127,7 @@ export const generateTitleIdeas = async (params: {
     .filter(Boolean)
     .join("\n");
 
-  const response = await openai.responses.create({
+  const titleResponsePayload = {
     model: getResponsesModel(),
     input: [
       {
@@ -138,7 +139,11 @@ export const generateTitleIdeas = async (params: {
     ],
     response_format: { type: "json_schema", json_schema: titleSchema },
     temperature: 0.5,
-  });
+  } satisfies ResponseCreateParamsNonStreaming & {
+    response_format: { type: "json_schema"; json_schema: typeof titleSchema };
+  };
+
+  const response = await openai.responses.create(titleResponsePayload);
 
   const text = extractResponseText(response);
   const parsed = safeJSONParse<TitleSchema>(text);

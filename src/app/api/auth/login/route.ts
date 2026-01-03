@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-
-import type { Database } from "@/types/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const schema = z.object({
   email: z.string().email(),
@@ -21,7 +18,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const { email, password } = parsed.data;
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });

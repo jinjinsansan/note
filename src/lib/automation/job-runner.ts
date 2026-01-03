@@ -26,7 +26,10 @@ type RunResult = {
 
 const nowIso = () => new Date().toISOString();
 
-const fetchNextQueuedJob = async (supabase: SupabaseClient<Database>) => {
+export type AutomationSupabase = SupabaseClient<Database>;
+type AutomationJobUpdate = Database["public"]["Tables"]["automation_jobs"]["Update"];
+
+const fetchNextQueuedJob = async (supabase: AutomationSupabase) => {
   const currentTime = nowIso();
   const { data, error } = await supabase
     .from("automation_jobs")
@@ -44,14 +47,15 @@ const fetchNextQueuedJob = async (supabase: SupabaseClient<Database>) => {
   return (data?.[0] as AutomationJobRow | undefined) ?? null;
 };
 
-const claimJob = async (supabase: SupabaseClient<Database>, job: AutomationJobRow) => {
+const claimJob = async (supabase: AutomationSupabase, job: AutomationJobRow) => {
+  const claimUpdate: AutomationJobUpdate = {
+    status: "processing",
+    started_at: nowIso(),
+    attempts: (job.attempts ?? 0) + 1,
+  };
   const claimed = await supabase
     .from("automation_jobs")
-    .update({
-      status: "processing",
-      started_at: nowIso(),
-      attempts: (job.attempts ?? 0) + 1,
-    })
+    .update(claimUpdate as never)
     .eq("id", job.id)
     .eq("status", "queued")
     .select("id,attempts")
@@ -64,60 +68,62 @@ const claimJob = async (supabase: SupabaseClient<Database>, job: AutomationJobRo
     throw new Error(claimed.error.message);
   }
 
-  return { ...job, attempts: claimed.data.attempts } satisfies AutomationJobRow;
+  const claimedData = claimed.data as { attempts: number } | null;
+  return { ...job, attempts: claimedData?.attempts ?? job.attempts ?? 1 } satisfies AutomationJobRow;
 };
 
 const markCompleted = async (
-  supabase: SupabaseClient<Database>,
+  supabase: AutomationSupabase,
   job: AutomationJobRow,
   resultUrl: string | null,
 ) => {
   const finishedAt = nowIso();
+  const jobUpdate: AutomationJobUpdate = {
+    status: "completed",
+    finished_at: finishedAt,
+    error_message: null,
+    result_url: resultUrl,
+    updated_at: finishedAt,
+  };
   await supabase
     .from("automation_jobs")
-    .update({
-      status: "completed",
-      finished_at: finishedAt,
-      error_message: null,
-      result_url: resultUrl,
-      updated_at: finishedAt,
-    })
+    .update(jobUpdate as never)
     .eq("id", job.id);
 
+  const articleUpdate: Database["public"]["Tables"]["articles"]["Update"] = {
+    status: "published",
+    published_at: finishedAt,
+    note_article_url: resultUrl ?? job.articles?.note_article_url ?? null,
+    updated_at: finishedAt,
+  };
   await supabase
     .from("articles")
-    .update({
-      status: "published",
-      published_at: finishedAt,
-      note_article_url: resultUrl ?? job.articles?.note_article_url ?? null,
-      updated_at: finishedAt,
-    })
+    .update(articleUpdate as never)
     .eq("id", job.article_id);
 };
 
 const markFailed = async (
-  supabase: SupabaseClient<Database>,
+  supabase: AutomationSupabase,
   job: AutomationJobRow,
   reason: string,
 ) => {
   const attempts = job.attempts ?? 1;
   const finishedAt = nowIso();
   const shouldRetry = attempts < MAX_ATTEMPTS;
+  const failureUpdate: AutomationJobUpdate = {
+    status: shouldRetry ? "queued" : "failed",
+    error_message: reason,
+    started_at: shouldRetry ? null : job.started_at,
+    finished_at: shouldRetry ? null : finishedAt,
+    updated_at: finishedAt,
+  };
   await supabase
     .from("automation_jobs")
-    .update({
-      status: shouldRetry ? "queued" : "failed",
-      error_message: reason,
-      started_at: shouldRetry ? null : job.started_at,
-      finished_at: shouldRetry ? null : finishedAt,
-      updated_at: finishedAt,
-    })
+    .update(failureUpdate as never)
     .eq("id", job.id);
 };
 
-export const runNextAutomationJob = async (
-  supabase: SupabaseClient<Database>,
-): Promise<RunResult> => {
+export const runNextAutomationJob = async (supabase: AutomationSupabase): Promise<RunResult> => {
   const jobCandidate = await fetchNextQueuedJob(supabase);
   if (!jobCandidate) {
     return { status: "no_job", message: "No queued automation jobs" };

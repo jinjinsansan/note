@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-
-import type { Database } from "@/types/supabase";
 import type { NoteAccountSummary } from "@/types/note-account";
 import { encryptToken } from "@/lib/security";
 import { logApiUsage } from "@/lib/api-logger";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/supabase";
 
 const selectFields =
   "id,note_user_id,note_username,is_primary,created_at,last_synced_at" as const;
@@ -19,7 +17,7 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -63,7 +61,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -97,21 +95,26 @@ export async function POST(request: Request) {
   const encryptedToken = encryptToken(authToken);
 
   if (isPrimary) {
+    const demotePayload: Database["public"]["Tables"]["note_accounts"]["Update"] = {
+      is_primary: false,
+    };
     await supabase
       .from("note_accounts")
-      .update({ is_primary: false })
+      .update(demotePayload as never)
       .eq("user_id", session.user.id);
   }
 
+  const insertPayload: Database["public"]["Tables"]["note_accounts"]["Insert"] = {
+    user_id: session.user.id,
+    note_user_id: noteUserId,
+    note_username: noteUsername,
+    auth_token: encryptedToken,
+    is_primary: isPrimary,
+  };
+
   const { data, error } = await supabase
     .from("note_accounts")
-    .insert({
-      user_id: session.user.id,
-      note_user_id: noteUserId,
-      note_username: noteUsername,
-      auth_token: encryptedToken,
-      is_primary: isPrimary,
-    })
+    .insert(insertPayload as never)
     .select(selectFields)
     .single();
 

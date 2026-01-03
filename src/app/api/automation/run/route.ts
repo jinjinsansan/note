@@ -10,7 +10,8 @@ export async function POST() {
     return NextResponse.json({ error: "AUTOMATION_RUNNER_SECRET not configured" }, { status: 500 });
   }
 
-  const authHeader = headers().get("authorization") ?? "";
+  const headerStore = await headers();
+  const authHeader = headerStore.get("authorization") ?? "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
   if (token !== secret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

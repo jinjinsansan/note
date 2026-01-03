@@ -1,3 +1,4 @@
+import type { ResponseCreateParamsNonStreaming } from "openai/resources/responses";
 import type { Database } from "@/types/supabase";
 
 import { getOpenAIClient, getResponsesModel } from "./openai";
@@ -154,7 +155,7 @@ const buildPrompt = (params: ArticleDraftParams) => {
 
 export const generateArticleDraft = async (params: ArticleDraftParams): Promise<ArticleDraft> => {
   const openai = getOpenAIClient();
-  const response = await openai.responses.create({
+  const responsePayload = {
     model: getResponsesModel(),
     input: [
       {
@@ -170,7 +171,11 @@ export const generateArticleDraft = async (params: ArticleDraftParams): Promise<
     response_format: { type: "json_schema", json_schema: draftSchema },
     temperature: 0.7,
     max_output_tokens: 1600,
-  });
+  } satisfies ResponseCreateParamsNonStreaming & {
+    response_format: { type: "json_schema"; json_schema: typeof draftSchema };
+  };
+
+  const response = await openai.responses.create(responsePayload);
 
   const text = extractResponseText(response);
   const parsed = safeJSONParse<ArticleDraftSchema>(text);

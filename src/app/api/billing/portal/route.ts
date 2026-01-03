@@ -1,15 +1,17 @@
-import { headers, cookies } from "next/headers";
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
 import { getStripeClient } from "@/lib/stripe";
 import { logApiUsage } from "@/lib/api-logger";
 import type { Database } from "@/types/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+
+type BillingPortalProfile = Pick<Database["public"]["Tables"]["users"]["Row"], "stripe_customer_id">;
 
 const defaultOrigin = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 export async function POST() {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -28,7 +30,9 @@ export async function POST() {
       .eq("id", userId)
       .single();
 
-    if (error || !profile?.stripe_customer_id) {
+    const profileData = profile as BillingPortalProfile | null;
+
+    if (error || !profileData?.stripe_customer_id) {
       return NextResponse.json(
         { error: "有効なStripeカスタマーがありません" },
         { status: 400 },
@@ -36,10 +40,11 @@ export async function POST() {
     }
 
     const stripe = getStripeClient();
-    const origin = headers().get("origin") ?? defaultOrigin();
+    const headerStore = await headers();
+    const origin = headerStore.get("origin") ?? defaultOrigin();
 
     const portal = await stripe.billingPortal.sessions.create({
-      customer: profile.stripe_customer_id,
+      customer: profileData.stripe_customer_id,
       return_url: `${origin}/billing`,
     });
 

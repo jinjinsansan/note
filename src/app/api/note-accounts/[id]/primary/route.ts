@@ -1,18 +1,15 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-
-import type { Database } from "@/types/supabase";
 import { logApiUsage } from "@/lib/api-logger";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/supabase";
 
-type RouteParams = {
-  params: {
-    id: string;
-  };
+type RouteContext = {
+  params: Promise<{ id: string }>;
 };
 
-export async function POST(_request: Request, { params }: RouteParams) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+export async function POST(_request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -24,9 +21,12 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
   const userId = session.user.id;
 
+  const resetPayload: Database["public"]["Tables"]["note_accounts"]["Update"] = {
+    is_primary: false,
+  };
   const { error: resetError } = await supabase
     .from("note_accounts")
-    .update({ is_primary: false })
+    .update(resetPayload as never)
     .eq("user_id", userId);
 
   if (resetError) {
@@ -42,11 +42,14 @@ export async function POST(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: resetError.message }, { status: 500 });
   }
 
+  const setPrimaryPayload: Database["public"]["Tables"]["note_accounts"]["Update"] = {
+    is_primary: true,
+  };
   const { data, error } = await supabase
     .from("note_accounts")
-    .update({ is_primary: true })
+    .update(setPrimaryPayload as never)
     .eq("user_id", userId)
-    .eq("id", params.id)
+    .eq("id", id)
     .select(
       "id,note_user_id,note_username,is_primary,created_at,last_synced_at",
     )

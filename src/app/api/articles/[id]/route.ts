@@ -1,11 +1,9 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-
-import type { Database } from "@/types/supabase";
 import type { ArticleDetail } from "@/types/article";
 import { logApiUsage } from "@/lib/api-logger";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/supabase";
 
 const updateSchema = z.object({
   title: z.string().min(5, "タイトルは5文字以上").optional(),
@@ -16,14 +14,13 @@ const updateSchema = z.object({
   noteAccountId: z.string().uuid().nullable().optional(),
 });
 
-type Params = {
-  params: {
-    id: string;
-  };
+type RouteContext = {
+  params: Promise<{ id: string }>;
 };
 
-export async function GET(_request: Request, { params }: Params) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+export async function GET(_request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -41,7 +38,7 @@ export async function GET(_request: Request, { params }: Params) {
       "id,title,category,content,meta_description,status,cta_id,created_at,updated_at",
     )
     .eq("user_id", session.user.id)
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
 
   if (error) {
@@ -70,8 +67,9 @@ export async function GET(_request: Request, { params }: Params) {
   return NextResponse.json({ article: data as ArticleDetail });
 }
 
-export async function PUT(request: Request, { params }: Params) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+export async function PUT(request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -101,7 +99,7 @@ export async function PUT(request: Request, { params }: Params) {
     );
   }
 
-  const updates: Record<string, unknown> = {};
+  const updates: Database["public"]["Tables"]["articles"]["Update"] = {};
   const { title, content, metaDescription, status, ctaId, noteAccountId } = parsed.data;
   if (title !== undefined) updates.title = title;
   if (content !== undefined) updates.content = content;
@@ -149,9 +147,9 @@ export async function PUT(request: Request, { params }: Params) {
 
   const { data, error } = await supabase
     .from("articles")
-    .update(updates)
+    .update(updates as never)
     .eq("user_id", session.user.id)
-    .eq("id", params.id)
+    .eq("id", id)
     .select(
       "id,title,category,content,meta_description,status,cta_id,created_at,updated_at",
     )

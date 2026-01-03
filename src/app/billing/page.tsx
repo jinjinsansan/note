@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { BillingActions } from "@/components/billing/billing-actions";
 import { getMonthlyArticleUsage, getPlanDefinition } from "@/lib/billing/plans";
+import type { Database } from "@/types/supabase";
 
 const FEATURES = [
   "note記事の自動生成とセーブ",
@@ -46,10 +47,16 @@ export default async function BillingPage() {
       .limit(5),
   ]);
 
-  const planId = profile?.subscription_plan ?? "free";
-  const status = profile?.subscription_status ?? "inactive";
+  const profileRow = profile as {
+    subscription_plan: string | null;
+    subscription_status: string | null;
+  } | null;
+  const planId = profileRow?.subscription_plan ?? "free";
+  const status = profileRow?.subscription_status ?? "inactive";
   const planDefinition = getPlanDefinition(planId);
   const usageThisMonth = await getMonthlyArticleUsage(supabase, session.user.id);
+
+  const subscriptions = (subscriptionHistory ?? []) as Database["public"]["Tables"]["subscriptions"]["Row"][];
 
   return (
     <section className="space-y-8">
@@ -144,7 +151,7 @@ export default async function BillingPage() {
           <p className="text-xs uppercase tracking-widest text-zinc-500">最近の請求履歴</p>
           <p className="text-sm text-zinc-500">Stripeサブスクリプションのステータスを表示します</p>
         </div>
-        {subscriptionHistory && subscriptionHistory.length > 0 ? (
+        {subscriptions.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
@@ -156,7 +163,7 @@ export default async function BillingPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {subscriptionHistory.map((sub) => (
+                {subscriptions.map((sub) => (
                   <tr key={`${sub.plan_id}-${sub.created_at}`} className="text-zinc-700">
                     <td className="py-3 font-medium">{getPlanDefinition(sub.plan_id).label}</td>
                     <td className="py-3 capitalize">{sub.status ?? "不明"}</td>

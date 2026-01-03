@@ -1,12 +1,12 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-
-import type { Database } from "@/types/supabase";
 import { SEO_CATEGORIES } from "@/lib/seo-data";
 import { logApiUsage } from "@/lib/api-logger";
 import { generateKeywordIdeas } from "@/lib/ai/seo-generator";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/supabase";
+
+type KeywordInsert = Database["public"]["Tables"]["keywords"]["Insert"];
 
 const schema = z.object({
   category: z.string(),
@@ -16,7 +16,7 @@ const schema = z.object({
 const allowedCategories = new Set(SEO_CATEGORIES);
 
 export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -79,19 +79,19 @@ export async function POST(request: Request) {
 
   try {
     if (keywords.length) {
-      await supabase.from("keywords").upsert(
-        keywords.map((keyword) => ({
-          user_id: userId,
-          keyword: keyword.keyword,
-          category,
-          search_volume: keyword.searchVolume,
-          competition_difficulty: keyword.difficultyScore,
-          trend_score: keyword.trendScore,
-          difficulty_level: keyword.difficultyLevel,
-          rationale: keyword.rationale,
-        })),
-        { onConflict: "user_id,keyword,category" },
-      );
+      const keywordPayloads: KeywordInsert[] = keywords.map((keyword) => ({
+        user_id: userId,
+        keyword: keyword.keyword,
+        category,
+        search_volume: keyword.searchVolume,
+        competition_difficulty: keyword.difficultyScore,
+        trend_score: keyword.trendScore,
+        difficulty_level: keyword.difficultyLevel,
+        rationale: keyword.rationale,
+      }));
+      await supabase
+        .from("keywords")
+        .upsert(keywordPayloads as never, { onConflict: "user_id,keyword,category" });
     }
   } catch (dbError) {
     console.error("keyword_upsert_failed", dbError);

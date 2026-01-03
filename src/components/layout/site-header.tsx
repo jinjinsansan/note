@@ -7,7 +7,13 @@ import { useMemo, useState } from "react";
 import { useAuth } from "@/components/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 
-const NAV_LINKS = [
+type NavLink = {
+  href: string;
+  label: string;
+  active?: boolean;
+};
+
+const NAV_LINKS: NavLink[] = [
   { href: "/articles", label: "記事生成" },
   { href: "/seo", label: "SEOラボ" },
   { href: "/style-profiles", label: "スタイル学習" },
@@ -24,7 +30,7 @@ export function SiteHeader() {
   const pathname = usePathname();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const navLinks = useMemo(() => {
+  const navLinks = useMemo<NavLink[]>(() => {
     if (!pathname) return NAV_LINKS;
     return NAV_LINKS.map((link) => ({
       ...link,

@@ -1,16 +1,17 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
 import { getStripeClient } from "@/lib/stripe";
 import { logApiUsage } from "@/lib/api-logger";
 import type { Database } from "@/types/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+
+type BillingUserProfile = Pick<Database["public"]["Tables"]["users"]["Row"], "email" | "stripe_customer_id">;
 
 const defaultOrigin = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 export async function POST() {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -34,26 +35,32 @@ export async function POST() {
       .eq("id", userId)
       .single();
 
-    if (error || !profile) {
+    const profileData = profile as BillingUserProfile | null;
+
+    if (error || !profileData) {
       throw new Error("ユーザープロフィールを取得できません");
     }
 
     const stripe = getStripeClient();
-    let customerId = profile.stripe_customer_id ?? undefined;
+    let customerId = profileData.stripe_customer_id ?? undefined;
 
     if (!customerId) {
       const customer = await stripe.customers.create({
-        email: profile.email ?? undefined,
+        email: profileData.email ?? undefined,
         metadata: { userId },
       });
       customerId = customer.id;
+        const updatePayload: Database["public"]["Tables"]["users"]["Update"] = {
+          stripe_customer_id: customerId,
+        };
       await supabase
         .from("users")
-        .update({ stripe_customer_id: customerId })
+          .update(updatePayload as never)
         .eq("id", userId);
     }
 
-    const origin = headers().get("origin") ?? defaultOrigin();
+    const headerStore = await headers();
+    const origin = headerStore.get("origin") ?? defaultOrigin();
 
     const sessionCheckout = await stripe.checkout.sessions.create({
       mode: "subscription",

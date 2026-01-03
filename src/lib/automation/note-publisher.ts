@@ -1,8 +1,12 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import puppeteer from "puppeteer";
-
+import type { Page, ElementHandle } from "puppeteer";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { decryptToken } from "@/lib/security";
+
+type AutomationJobInsert = Database["public"]["Tables"]["automation_jobs"]["Insert"];
+type AutomationJobRow = Database["public"]["Tables"]["automation_jobs"]["Row"];
+type PageWithXpath = Page & { $x: (expression: string) => Promise<ElementHandle<Node>[]> };
 
 type AutomationJobInput = {
   articleId: string;
@@ -36,7 +40,7 @@ export async function queueNoteAutomationJobs(params: {
     return { queued: 0, jobs: [], notes: ["No jobs to queue"] };
   }
 
-  const inserts = jobs.map((job) => ({
+  const inserts: AutomationJobInsert[] = jobs.map((job) => ({
     user_id: userId,
     article_id: job.articleId,
     note_account_id: job.noteAccountId,
@@ -44,11 +48,11 @@ export async function queueNoteAutomationJobs(params: {
     status: "queued",
     scheduled_for: job.schedule ?? null,
     payload: job.ctaId ? { ctaId: job.ctaId } : null,
-  } satisfies Database["public"]["Tables"]["automation_jobs"]["Insert"]));
+  }));
 
   const { data, error } = await supabase
     .from("automation_jobs")
-    .insert(inserts)
+    .insert(inserts as never)
     .select("id,article_id,status,scheduled_for,created_at")
     .order("created_at", { ascending: false });
 
@@ -56,7 +60,7 @@ export async function queueNoteAutomationJobs(params: {
     throw new Error(error.message);
   }
 
-  const jobsSummary = (data ?? []).map((record) => ({
+  const jobsSummary = ((data ?? []) as AutomationJobRow[]).map((record) => ({
     id: record.id,
     articleId: record.article_id,
     status: record.status,
@@ -109,7 +113,7 @@ const parseCookiePairs = (rawToken: string) =>
     .filter((cookie) => cookie.name && cookie.value);
 
 const typeIntoFirstMatch = async (
-  page: puppeteer.Page,
+  page: Page,
   selectors: string[],
   value: string,
 ) => {
@@ -128,7 +132,7 @@ const typeIntoFirstMatch = async (
   return false;
 };
 
-const writeIntoEditor = async (page: puppeteer.Page, selectors: string[], content: string) => {
+const writeIntoEditor = async (page: Page, selectors: string[], content: string) => {
   for (const selector of selectors) {
     const element = await page.$(selector);
     if (element) {
@@ -160,7 +164,7 @@ export const publishArticleToNote = async (params: {
   article: { id: string; title: string; content: string };
 }): Promise<{ url: string } | null> => {
   const browser = await puppeteer.launch({
-    headless: "new",
+    headless: process.env.NOTE_PUBLISHER_HEADLESS === "false" ? false : "shell",
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
@@ -196,7 +200,7 @@ export const publishArticleToNote = async (params: {
     for (const selector of candidateSelectors.publishButton) {
       if (selector.startsWith("xpath=")) {
         const xpath = selector.slice("xpath=".length);
-        const [button] = await page.$x(xpath);
+        const [button] = await (page as PageWithXpath).$x(xpath);
         if (button) {
           await button.click();
           clickedPublish = true;

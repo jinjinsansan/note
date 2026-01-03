@@ -13,7 +13,7 @@ export const getStripeClient = () => {
   }
 
   cachedStripe = new Stripe(secretKey, {
-    apiVersion: "2023-10-16",
+    apiVersion: "2023-10-16" as Stripe.LatestApiVersion,
   });
 
   return cachedStripe;

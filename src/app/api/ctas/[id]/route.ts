@@ -1,18 +1,14 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-
-import type { Database } from "@/types/supabase";
 import { logApiUsage } from "@/lib/api-logger";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-type Params = {
-  params: {
-    id: string;
-  };
+type RouteContext = {
+  params: Promise<{ id: string }>;
 };
 
-export async function DELETE(_request: Request, { params }: Params) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+export async function DELETE(_request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -28,7 +24,7 @@ export async function DELETE(_request: Request, { params }: Params) {
     .from("cta_settings")
     .delete()
     .eq("user_id", session.user.id)
-    .eq("id", params.id);
+    .eq("id", id);
 
   if (error) {
     await logApiUsage({

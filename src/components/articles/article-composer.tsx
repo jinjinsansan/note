@@ -291,7 +291,7 @@ export function ArticleComposer({ onCreated, styleProfiles, ctas, quotaInfo }: P
                   </option>
                 ))}
               </select>
-              {selectedCta && (
+              {selectedCta && selectedCta.cta_content && (
                 <p className="text-xs text-zinc-500">
                   {selectedCta.cta_content.slice(0, 60)}...
                 </p>

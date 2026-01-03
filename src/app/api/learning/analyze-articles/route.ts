@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
 import { analyzeArticleText, aggregateStyleMetrics } from "@/lib/text-analysis";
-import type { Database } from "@/types/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const ArticleInput = z.object({
   source: z.string().min(3, "URLまたはメモを入力してください"),
@@ -17,7 +15,7 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();

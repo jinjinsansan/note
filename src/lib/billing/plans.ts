@@ -38,10 +38,7 @@ export const getCurrentMonthRange = () => {
   return { start, end };
 };
 
-export const getMonthlyArticleUsage = async (
-  client: SupabaseClient<Database>,
-  userId: string,
-) => {
+export const getMonthlyArticleUsage = async (client: SupabaseClient<Database>, userId: string) => {
   const { start } = getCurrentMonthRange();
   const { count } = await client
     .from("articles")

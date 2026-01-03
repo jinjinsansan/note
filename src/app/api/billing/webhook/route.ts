@@ -1,13 +1,26 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
+type StripeSubscriptionWithPeriods = Stripe.Subscription & {
+  current_period_start?: number | null;
+  current_period_end?: number | null;
+};
+
+type InvoiceWithSubscription = Stripe.Invoice & {
+  subscription?: string | Stripe.Subscription | null;
+};
+
+type UserEmailRow = Pick<Database["public"]["Tables"]["users"]["Row"], "email">;
 
 import { getStripeClient } from "@/lib/stripe";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getPlanDefinition, type PlanId } from "@/lib/billing/plans";
 import { sendPaymentFailureEmail } from "@/lib/email/notifications";
+import type { Database } from "@/types/supabase";
 
 export const runtime = "nodejs";
+
+type UserIdRow = Pick<Database["public"]["Tables"]["users"]["Row"], "id">;
 
 const getUserIdFromSubscription = async (
   subscription: Stripe.Subscription,
@@ -27,7 +40,8 @@ const getUserIdFromSubscription = async (
     .select("id")
     .eq("stripe_customer_id", customerId)
     .single();
-  return data?.id ?? null;
+  const userRow = data as UserIdRow | null;
+  return userRow?.id ?? null;
 };
 
 const mapPriceToPlan = (priceId?: string | null): PlanId => {
@@ -47,15 +61,13 @@ const applyPlanToUser = async (
   supabaseAdmin: ReturnType<typeof getSupabaseAdminClient>,
 ) => {
   const planDefinition = getPlanDefinition(planId);
-  await supabaseAdmin
-    ?.from("users")
-    .update({
-      subscription_plan: planId,
-      subscription_status: status,
-      api_quota_monthly: planDefinition.monthlyArticleQuota,
-      api_quota_used: 0,
-    })
-    .eq("id", userId);
+  const userUpdate: Database["public"]["Tables"]["users"]["Update"] = {
+    subscription_plan: planId,
+    subscription_status: status,
+    api_quota_monthly: planDefinition.monthlyArticleQuota,
+    api_quota_used: 0,
+  };
+  await supabaseAdmin?.from("users").update(userUpdate as never).eq("id", userId);
 };
 
 const upsertSubscriptionRecord = async (
@@ -72,20 +84,18 @@ const upsertSubscriptionRecord = async (
 ) => {
   const { userId, subscriptionId, planId, status, cancelAtPeriodEnd, periodStart, periodEnd } =
     params;
+  const subscriptionPayload: Database["public"]["Tables"]["subscriptions"]["Insert"] = {
+    user_id: userId,
+    stripe_subscription_id: subscriptionId,
+    plan_id: planId,
+    status,
+    cancel_at_period_end: cancelAtPeriodEnd ?? false,
+    current_period_start: isoOrNull(periodStart),
+    current_period_end: isoOrNull(periodEnd),
+  };
   await supabaseAdmin
     ?.from("subscriptions")
-    .upsert(
-      {
-        user_id: userId,
-        stripe_subscription_id: subscriptionId,
-        plan_id: planId,
-        status,
-        cancel_at_period_end: cancelAtPeriodEnd ?? false,
-        current_period_start: isoOrNull(periodStart),
-        current_period_end: isoOrNull(periodEnd),
-      },
-      { onConflict: "user_id" },
-    );
+    .upsert(subscriptionPayload as never, { onConflict: "user_id" });
 };
 
 const handleCheckoutCompleted = async (
@@ -97,7 +107,7 @@ const handleCheckoutCompleted = async (
   if (!subscriptionId) {
     return;
   }
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const subscription = (await stripe.subscriptions.retrieve(subscriptionId)) as StripeSubscriptionWithPeriods;
   const userId =
     session.metadata?.userId || (await getUserIdFromSubscription(subscription, supabaseAdmin));
   if (!userId) {
@@ -121,7 +131,7 @@ const handleCheckoutCompleted = async (
 };
 
 const handleSubscriptionUpdated = async (
-  subscription: Stripe.Subscription,
+  subscription: StripeSubscriptionWithPeriods,
   supabaseAdmin: ReturnType<typeof getSupabaseAdminClient>,
 ) => {
   const userId = await getUserIdFromSubscription(subscription, supabaseAdmin);
@@ -146,7 +156,7 @@ const handleSubscriptionUpdated = async (
 };
 
 const handleSubscriptionDeleted = async (
-  subscription: Stripe.Subscription,
+  subscription: StripeSubscriptionWithPeriods,
   supabaseAdmin: ReturnType<typeof getSupabaseAdminClient>,
 ) => {
   const userId = await getUserIdFromSubscription(subscription, supabaseAdmin);
@@ -154,11 +164,14 @@ const handleSubscriptionDeleted = async (
     return;
   }
   await applyPlanToUser(userId, "free", "canceled", supabaseAdmin);
-  await supabaseAdmin?.from("subscriptions").update({ status: "canceled" }).eq("user_id", userId);
+  const cancelUpdate: Database["public"]["Tables"]["subscriptions"]["Update"] = {
+    status: "canceled",
+  };
+  await supabaseAdmin?.from("subscriptions").update(cancelUpdate as never).eq("user_id", userId);
 };
 
 const handleInvoiceSucceeded = async (
-  invoice: Stripe.Invoice,
+  invoice: InvoiceWithSubscription,
   stripe: Stripe,
   supabaseAdmin: ReturnType<typeof getSupabaseAdminClient>,
 ) => {
@@ -166,7 +179,7 @@ const handleInvoiceSucceeded = async (
   if (!subscriptionId) {
     return;
   }
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const subscription = (await stripe.subscriptions.retrieve(subscriptionId)) as StripeSubscriptionWithPeriods;
   const userId = await getUserIdFromSubscription(subscription, supabaseAdmin);
   if (!userId) {
     return;
@@ -174,13 +187,14 @@ const handleInvoiceSucceeded = async (
   const priceId = subscription.items.data[0]?.price?.id;
   const planId = mapPriceToPlan(priceId);
   const planDefinition = getPlanDefinition(planId);
+  const invoiceSuccessUpdate: Database["public"]["Tables"]["users"]["Update"] = {
+    api_quota_used: 0,
+    api_quota_monthly: planDefinition.monthlyArticleQuota,
+    subscription_status: invoice.status ?? "active",
+  };
   await supabaseAdmin
     ?.from("users")
-    .update({
-      api_quota_used: 0,
-      api_quota_monthly: planDefinition.monthlyArticleQuota,
-      subscription_status: invoice.status ?? "active",
-    })
+    .update(invoiceSuccessUpdate as never)
     .eq("id", userId);
   await upsertSubscriptionRecord(
     {
@@ -197,7 +211,7 @@ const handleInvoiceSucceeded = async (
 };
 
 const handleInvoiceFailed = async (
-  invoice: Stripe.Invoice,
+  invoice: InvoiceWithSubscription,
   stripe: Stripe,
   supabaseAdmin: ReturnType<typeof getSupabaseAdminClient>,
 ) => {
@@ -205,7 +219,7 @@ const handleInvoiceFailed = async (
   if (!subscriptionId) {
     return;
   }
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const subscription = (await stripe.subscriptions.retrieve(subscriptionId)) as StripeSubscriptionWithPeriods;
   const userId = await getUserIdFromSubscription(subscription, supabaseAdmin);
   if (!userId) {
     return;
@@ -224,9 +238,14 @@ const handleInvoiceFailed = async (
     .eq("id", userId)
     .single();
 
+  const userProfileData = userProfile as UserEmailRow | null;
+
+  const pastDueUpdate: Database["public"]["Tables"]["users"]["Update"] = {
+    subscription_status: "past_due",
+  };
   await supabaseAdmin
     .from("users")
-    .update({ subscription_status: "past_due" })
+    .update(pastDueUpdate as never)
     .eq("id", userId);
   await upsertSubscriptionRecord(
     {
@@ -241,12 +260,12 @@ const handleInvoiceFailed = async (
     supabaseAdmin,
   );
 
-  if (userProfile?.email) {
+  if (userProfileData?.email) {
     const nextAttempt = invoice.next_payment_attempt
       ? new Date(invoice.next_payment_attempt * 1000).toLocaleString("ja-JP")
       : undefined;
     await sendPaymentFailureEmail({
-      email: userProfile.email,
+      email: userProfileData.email,
       planLabel: planDefinition.label,
       nextAction: nextAttempt ? `${nextAttempt} に再請求を試行します` : undefined,
     });
@@ -266,7 +285,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Supabase admin client unavailable" }, { status: 500 });
   }
 
-  const signature = headers().get("stripe-signature");
+  const headerStore = await headers();
+  const signature = headerStore.get("stripe-signature");
   if (!signature) {
     return NextResponse.json({ error: "Missing Stripe signature" }, { status: 400 });
   }

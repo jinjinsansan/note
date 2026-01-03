@@ -1,11 +1,12 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-
-import type { Database } from "@/types/supabase";
 import type { ArticleImage } from "@/types/article";
 import { logApiUsage } from "@/lib/api-logger";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+type ArticleImageInsert = Database["public"]["Tables"]["article_images"]["Insert"];
 
 const schema = z.object({
   headingId: z.string().optional(),
@@ -15,14 +16,14 @@ const schema = z.object({
   generatedBy: z.string().optional(),
 });
 
-type Params = {
-  params: {
-    id: string;
-  };
+type RouteContext = {
+  params: Promise<{ id: string }>;
 };
 
-export async function GET(_request: Request, { params }: Params) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+export async function GET(_request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  const supabase = createServerSupabaseClient();
+  const db = supabase as SupabaseClient<Database>;
   const startedAt = Date.now();
   const {
     data: { session },
@@ -34,10 +35,10 @@ export async function GET(_request: Request, { params }: Params) {
 
   const userId = session.user.id;
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("article_images")
     .select("id,article_id,heading_id,image_url,alt_text,image_prompt,generated_by,created_at")
-    .eq("article_id", params.id)
+    .eq("article_id", id)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -65,8 +66,10 @@ export async function GET(_request: Request, { params }: Params) {
   return NextResponse.json({ images: (data ?? []) as ArticleImage[] });
 }
 
-export async function POST(request: Request, { params }: Params) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+export async function POST(request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  const supabase = createServerSupabaseClient();
+  const db = supabase as SupabaseClient<Database>;
   const startedAt = Date.now();
   const {
     data: { session },
@@ -98,16 +101,18 @@ export async function POST(request: Request, { params }: Params) {
 
   const { headingId, imageUrl, altText, imagePrompt, generatedBy } = parsed.data;
 
-  const { data, error } = await supabase
+  const payload: ArticleImageInsert = {
+    article_id: id,
+    heading_id: headingId ?? null,
+    image_url: imageUrl,
+    alt_text: altText,
+    image_prompt: imagePrompt ?? null,
+    generated_by: generatedBy ?? "manual",
+  };
+
+  const { data, error } = await db
     .from("article_images")
-    .insert({
-      article_id: params.id,
-      heading_id: headingId ?? null,
-      image_url: imageUrl,
-      alt_text: altText,
-      image_prompt: imagePrompt ?? null,
-      generated_by: generatedBy ?? "manual",
-    })
+    .insert(payload as never)
     .select("id,article_id,heading_id,image_url,alt_text,image_prompt,generated_by,created_at")
     .single();
 

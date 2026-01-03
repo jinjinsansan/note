@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { runNextAutomationJob } from "@/lib/automation/job-runner";
+import { runNextAutomationJob, type AutomationSupabase } from "@/lib/automation/job-runner";
 import type { Database } from "@/types/supabase";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -21,7 +21,7 @@ async function main() {
 
   const supabase = createClient<Database>(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
-  });
+  }) as unknown as AutomationSupabase;
 
   let running = true;
   const shutdown = (signal: string) => {

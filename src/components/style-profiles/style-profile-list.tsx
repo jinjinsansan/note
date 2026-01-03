@@ -26,11 +26,14 @@ export function StyleProfileList({ profiles }: Props) {
             <CardDescription className="text-sm text-zinc-500">
               {profile.tone} / {profile.text_style} / {profile.vocabulary_level}
             </CardDescription>
-            {Array.isArray(profile.learning_articles?.sourceUrls) && (
-              <p className="text-sm text-zinc-600">
-                参考URL: {profile.learning_articles.sourceUrls.length}件
-              </p>
-            )}
+            {(() => {
+              const sources = (profile.learning_articles as { sourceUrls?: string[] } | null)
+                ?.sourceUrls;
+              if (!Array.isArray(sources)) return null;
+              return (
+                <p className="text-sm text-zinc-600">参考URL: {sources.length}件</p>
+              );
+            })()}
             <p className="text-xs text-zinc-400">
               作成日: {new Date(profile.created_at).toLocaleDateString("ja-JP")}
             </p>

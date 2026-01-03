@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import bcrypt from "bcryptjs";
 
 import type { Database } from "@/types/supabase";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getPlanDefinition } from "@/lib/billing/plans";
 import { sendWelcomeEmail } from "@/lib/email/notifications";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const schema = z.object({
   email: z.string().email(),
@@ -30,7 +29,7 @@ export async function POST(request: Request) {
   }
 
   const { email, password, username } = parsed.data;
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
 
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -60,7 +59,7 @@ export async function POST(request: Request) {
   const adminClient = getSupabaseAdminClient();
   const dbClient = adminClient ?? supabase;
 
-  const { error: profileError } = await dbClient.from("users").insert(profilePayload);
+  const { error: profileError } = await dbClient.from("users").insert(profilePayload as never);
 
   if (profileError) {
     return NextResponse.json(

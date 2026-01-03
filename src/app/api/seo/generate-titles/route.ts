@@ -1,11 +1,12 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
-import type { Database } from "@/types/supabase";
 import { logApiUsage } from "@/lib/api-logger";
 import { generateTitleIdeas } from "@/lib/ai/seo-generator";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/supabase";
+
+type SeoTitleInsert = Database["public"]["Tables"]["seo_titles"]["Insert"];
 
 const schema = z.object({
   keyword: z.string().min(2, "キーワードを入力してください"),
@@ -14,7 +15,7 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -65,19 +66,17 @@ export async function POST(request: Request) {
 
   try {
     if (titles.length) {
-      await supabase.from("seo_titles").insert(
-        titles.map((title) => ({
-          user_id: userId,
-          title: title.title,
-          keywords: { keyword },
-          difficulty_level: title.difficultyLevel,
-          difficulty_score: title.difficultyScore,
-          seo_score: title.seoScore,
-          estimated_search_volume: null,
-          is_selected: false,
-        })),
-        { returning: "minimal" },
-      );
+      const titlePayloads: SeoTitleInsert[] = titles.map((title) => ({
+        user_id: userId,
+        title: title.title,
+        keywords: { keyword } as SeoTitleInsert["keywords"],
+        difficulty_level: title.difficultyLevel,
+        difficulty_score: title.difficultyScore,
+        seo_score: title.seoScore,
+        estimated_search_volume: null,
+        is_selected: false,
+      }));
+      await supabase.from("seo_titles").insert(titlePayloads as never);
     }
   } catch (dbError) {
     console.error("seo_titles_insert_failed", dbError);

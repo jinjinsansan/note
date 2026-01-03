@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import puppeteer from "puppeteer";
+import puppeteer, { type Page, type ElementHandle } from "puppeteer";
 
-import type { Database } from "@/types/supabase";
 import { encryptToken } from "@/lib/security";
 import { logApiUsage } from "@/lib/api-logger";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/supabase";
+
+type NoteAccountRow = Pick<
+  Database["public"]["Tables"]["note_accounts"]["Row"],
+  "id" | "note_user_id" | "is_primary"
+>;
 
 export const runtime = "nodejs";
 
@@ -30,7 +34,7 @@ const submitSelectors = [
   'xpath=//button[contains(normalize-space(.),"ログイン")]',
 ];
 
-const focusAndType = async (page: puppeteer.Page, selectors: string[], value: string) => {
+const focusAndType = async (page: Page, selectors: string[], value: string) => {
   for (const selector of selectors) {
     const element = await page.$(selector);
     if (element) {
@@ -43,11 +47,15 @@ const focusAndType = async (page: puppeteer.Page, selectors: string[], value: st
   return false;
 };
 
-const clickFirst = async (page: puppeteer.Page, selectors: string[]) => {
+type PageWithXpath = Page & {
+  $x: (expression: string) => Promise<ElementHandle<Node>[]>;
+};
+
+const clickFirst = async (page: Page, selectors: string[]) => {
   for (const selector of selectors) {
     if (selector.startsWith("xpath=")) {
       const xpath = selector.slice("xpath=".length);
-      const [element] = await page.$x(xpath);
+      const [element] = await (page as PageWithXpath).$x(xpath);
       if (element) {
         await element.click();
         return true;
@@ -64,7 +72,7 @@ const clickFirst = async (page: puppeteer.Page, selectors: string[]) => {
   return false;
 };
 
-const gatherCookies = async (page: puppeteer.Page) => {
+const gatherCookies = async (page: Page) => {
   const cookies = await page.cookies();
   const relevant = cookies.filter((cookie) => cookie.domain?.endsWith("note.com"));
   if (!relevant.length) {
@@ -73,7 +81,7 @@ const gatherCookies = async (page: puppeteer.Page) => {
   return relevant.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
 };
 
-const fetchProfile = async (page: puppeteer.Page) => {
+const fetchProfile = async (page: Page) => {
   try {
     const response = await page.evaluate(async (endpoint) => {
       const res = await fetch(endpoint, { credentials: "include" });
@@ -88,7 +96,7 @@ const fetchProfile = async (page: puppeteer.Page) => {
 };
 
 export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -115,7 +123,7 @@ export async function POST(request: Request) {
   }
 
   const browser = await puppeteer.launch({
-    headless: "new",
+    headless: process.env.NOTE_PUBLISHER_HEADLESS === "false" ? false : "shell",
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
@@ -155,8 +163,9 @@ export async function POST(request: Request) {
       .select("id,is_primary,note_user_id")
       .eq("user_id", userId);
 
-    const existing = existingAccounts?.find((account) => account.note_user_id === profile.urlname);
-    const shouldSetPrimary = existingAccounts?.length ? undefined : true;
+    const noteAccounts = (existingAccounts ?? []) as NoteAccountRow[];
+    const existing = noteAccounts.find((account) => account.note_user_id === profile.urlname);
+    const shouldSetPrimary = noteAccounts.length ? undefined : true;
 
     const upsertPayload: Database["public"]["Tables"]["note_accounts"]["Insert"] = {
       user_id: userId,
@@ -167,12 +176,13 @@ export async function POST(request: Request) {
     };
 
     if (existing) {
+      const updatePayload: Database["public"]["Tables"]["note_accounts"]["Update"] = {
+        auth_token: encryptedToken,
+        note_username: upsertPayload.note_username,
+      };
       const { data, error } = await supabase
         .from("note_accounts")
-        .update({
-          auth_token: encryptedToken,
-          note_username: upsertPayload.note_username,
-        })
+        .update(updatePayload as never)
         .eq("user_id", userId)
         .eq("id", existing.id)
         .select(selectFields)
@@ -196,7 +206,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase
       .from("note_accounts")
-      .insert(upsertPayload)
+      .insert(upsertPayload as never)
       .select(selectFields)
       .single();
 

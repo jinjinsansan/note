@@ -1,19 +1,14 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-
-import type { Database } from "@/types/supabase";
 import { logApiUsage } from "@/lib/api-logger";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-type Params = {
-  params: {
-    id: string;
-    imageId: string;
-  };
+type RouteContext = {
+  params: Promise<{ id: string; imageId: string }>;
 };
 
-export async function DELETE(_request: Request, { params }: Params) {
-  const supabase = createRouteHandlerClient<Database>({ cookies });
+export async function DELETE(_request: Request, context: RouteContext) {
+  const { id, imageId } = await context.params;
+  const supabase = createServerSupabaseClient();
   const startedAt = Date.now();
   const {
     data: { session },
@@ -28,8 +23,8 @@ export async function DELETE(_request: Request, { params }: Params) {
   const { error } = await supabase
     .from("article_images")
     .delete()
-    .eq("article_id", params.id)
-    .eq("id", params.imageId);
+    .eq("article_id", id)
+    .eq("id", imageId);
 
   if (error) {
     await logApiUsage({
