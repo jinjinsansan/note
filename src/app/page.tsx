@@ -1,6 +1,18 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createServerSupabaseClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  // ログイン済みユーザーは記事生成ページにリダイレクト
+  if (session) {
+    redirect("/articles");
+  }
+
   return (
     <section className="space-y-8 rounded-3xl bg-white p-10 shadow-sm">
       <div className="space-y-4">

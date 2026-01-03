@@ -48,7 +48,7 @@ export function LoginForm() {
             : "ログインに失敗しました。",
         );
       }
-      router.push("/");
+      router.push("/articles");
       router.refresh();
     } catch (error) {
       console.error(error);
