@@ -51,21 +51,10 @@ export function SignupForm() {
     setServerError(null);
     setServerSuccess(null);
     try {
-      console.log("サインアップリクエスト送信中...", { email: values.email, username: values.username });
-      
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
-      }).catch((fetchError) => {
-        console.error("Fetch自体が失敗:", fetchError);
-        throw new Error(`ネットワークエラー: ${fetchError.message || "サーバーに接続できません"}`);
-      });
-
-      console.log("レスポンス受信:", {
-        status: response.status,
-        statusText: response.statusText,
-        contentType: response.headers.get("content-type"),
       });
 
       let payload: { error?: unknown; message?: string } | null = null;
@@ -73,23 +62,18 @@ export function SignupForm() {
       
       if (contentType.includes("application/json")) {
         const text = await response.text();
-        console.log("レスポンステキスト:", text);
         try {
           payload = JSON.parse(text);
-          console.log("パース済みペイロード:", payload);
-        } catch (parseError) {
-          console.error("JSON解析エラー:", parseError, "テキスト:", text);
+        } catch {
+          // JSON parse error - continue with null payload
         }
-      } else {
-        const text = await response.text();
-        console.log("非JSONレスポンス:", text);
       }
 
       if (!response.ok) {
         const message =
           payload && typeof payload.error === "string"
             ? payload.error
-            : `登録に失敗しました (HTTP ${response.status})。詳細はコンソールをご確認ください。`;
+            : "登録に失敗しました。時間をおいて再度お試しください。";
         throw new Error(message);
       }
 
@@ -99,11 +83,11 @@ export function SignupForm() {
       reset({ email: values.email, username: values.username, password: "" });
       setTimeout(() => router.push("/login"), 800);
     } catch (error) {
-      console.error("サインアップエラー詳細:", error);
+      console.error(error);
       setServerError(
         error instanceof Error
           ? error.message
-          : "問題が発生しました。コンソールでエラー詳細をご確認ください。",
+          : "問題が発生しました。時間をおいて再度お試しください。",
       );
     }
   };
